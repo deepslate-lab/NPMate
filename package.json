@@ -33,23 +33,52 @@
     },
     "files": [
       "src/**/*",
-      "backend/**/*",
+      "main/**/*",
+      "renderer/**/*",
       "controller/**/*",
       "registry/**/*",
       "data/**/*",
       "assets/**/*",
-      "server.js",
-      "ecosystem.config.js"
+      "node_modules/**/*",
+      "package.json",
+      "!node_modules/.bin",
+      "!node_modules/.cache"
+    ],
+    "extraResources": [
+      {
+        "from": "data/",
+        "to": "data/",
+        "filter": ["**/*"]
+      }
     ],
     "win": {
-      "target": "nsis",
-      "icon": "assets/icon.ico"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "requestedExecutionLevel": "asInvoker",
+      "publisherName": "DeepslateLab",
+      "sign": null,
+      "verifyUpdateCodeSignature": false
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
-    }
+      "createStartMenuShortcut": true,
+      "shortcutName": "NPMate",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico"
+    },
+    "directories": {
+      "buildResources": "build"
+    },
+    "compression": "maximum"
   }
 }
