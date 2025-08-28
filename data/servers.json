@@ -1,18 +1,1 @@
-[
-  {
-    "id": "myapp-001",
-    "name": "MyApp",
-    "path": "/Users/kevin/projects/myapp",
-    "autoStart": false,
-    "status": "stopped",
-    "pid": null
-  },
-  {
-    "id": "aa-1756360992965",
-    "name": "Fingetec",
-    "path": "C:\\Users\\Kevin Tharindu\\Documents\\Projects\\Fingertec\\project",
-    "autoStart": false,
-    "status": "stopped",
-    "pid": null
-  }
-]
+[]
