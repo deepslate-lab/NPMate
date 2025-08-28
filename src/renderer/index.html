@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>NPMate ■</title>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #1e1e1e;
+      color: #f0f0f0;
+      margin: 0;
+      padding: 30px;
+    }
+
+    h1 {
+      font-size: 28px;
+      margin-bottom: 20px;
+      color: #00c2ff;
+    }
+
+    .server-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .card {
+      background-color: #292929;
+      border: 1px solid #3a3a3a;
+      border-radius: 10px;
+      padding: 16px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+      transition: background 0.2s ease;
+    }
+
+    .card:hover {
+      background-color: #333;
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: bold;
+      color: #ffd369;
+      margin-bottom: 6px;
+    }
+
+    .card-details {
+      font-size: 13px;
+      margin-bottom: 10px;
+      line-height: 1.4;
+    }
+
+    .button-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    button {
+      background-color: #00c2ff;
+      color: #1e1e1e;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 5px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    button:hover {
+      background-color: #00a6d6;
+    }
+
+    button:active {
+      transform: scale(0.98);
+    }
+
+    .btn-stop {
+      background-color: #ff4757;
+      color: white;
+    }
+
+    .btn-stop:hover {
+      background-color: #ff3838;
+    }
+
+    .btn-delete {
+      background-color: #ff6b6b;
+      color: white;
+    }
+
+    .btn-delete:hover {
+      background-color: #ff5252;
+    }
+
+    .btn-console {
+      background-color: #2ed573;
+      color: white;
+    }
+
+    .btn-console:hover {
+      background-color: #26d464;
+    }
+
+    .btn-settings {
+      background-color: #a55eea;
+      color: white;
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 8px 12px;
+      font-size: 12px;
+      border-radius: 6px;
+      z-index: 100;
+    }
+
+    .btn-settings:hover {
+      background-color: #9742d6;
+    }
+
+    .switch-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 42px;
+      height: 22px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #555;
+      border-radius: 22px;
+      transition: 0.3s;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      border-radius: 50%;
+      transition: 0.3s;
+    }
+
+    .switch input:checked + .slider {
+      background-color: #00c2ff;
+    }
+
+    .switch input:checked + .slider:before {
+      transform: translateX(20px);
+    }
+
+    /* Modal Styles */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.6);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .modal {
+      background: #2e2e2e;
+      padding: 20px;
+      border-radius: 10px;
+      width: 300px;
+      max-width: 90vw;
+      box-shadow: 0 0 10px #000;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .modal h2 {
+      margin: 0;
+      font-size: 18px;
+      color: #00c2ff;
+    }
+
+    .modal label {
+      font-size: 13px;
+      margin-top: 10px;
+    }
+
+    .modal input {
+      padding: 8px;
+      border-radius: 5px;
+      border: 1px solid #555;
+      background: #1e1e1e;
+      color: #eee;
+      font-size: 14px;
+      width: 100%;
+      box-sizing: border-box;
+      outline: none;
+    }
+
+    .modal input:focus {
+      border-color: #00c2ff;
+      background: #252525;
+    }
+
+    .modal input:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .modal-buttons {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 15px;
+      gap: 10px;
+    }
+
+    /* Settings Modal Styles */
+    .settings-modal {
+      width: 400px;
+      max-width: 90vw;
+    }
+
+    .settings-group {
+      margin: 15px 0;
+      padding: 15px;
+      background: #3a3a3a;
+      border-radius: 8px;
+    }
+
+    .settings-group h3 {
+      margin: 0 0 10px 0;
+      font-size: 14px;
+      color: #ffd369;
+    }
+
+    .setting-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 10px 0;
+      font-size: 13px;
+    }
+
+    .setting-description {
+      font-size: 11px;
+      color: #aaa;
+      margin-top: 5px;
+      line-height: 1.3;
+    }
+
+    /* Console Modal Styles */
+    .console-modal {
+      width: 600px;
+      max-width: 90vw;
+      height: 400px;
+      max-height: 80vh;
+    }
+
+    .console-content {
+      background: #1e1e1e;
+      border: 1px solid #555;
+      border-radius: 5px;
+      height: 300px;
+      overflow-y: auto;
+      padding: 10px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+    }
+
+    .console-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 10px;
+    }
+
+    .status-indicator {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+
+    .status-running {
+      background-color: #2ed573;
+    }
+
+    .status-stopped {
+      background-color: #ff4757;
+    }
+
+    .notification {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 10px 15px;
+      border-radius: 5px;
+      color: white;
+      font-size: 12px;
+      z-index: 2000;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .notification.success {
+      background-color: #2ed573;
+    }
+
+    .notification.error {
+      background-color: #ff4757;
+    }
+
+    .notification.show {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+  <button class="btn-settings" onclick="openSettingsModal()">⚙️ Settings</button>
+  
+  <h1>NPMate ■</h1>
+  <div class="server-list" id="serverList"></div>
+
+  <!-- Add Server Modal -->
+  <div id="addServerModal" class="modal-overlay">
+    <div class="modal">
+      <h2>Add New Server</h2>
+      <label for="serverNameInput">Server Name</label>
+      <input type="text" id="serverNameInput" placeholder="e.g. MyApp" />
+      <label for="serverPathInput">Project Folder Path</label>
+      <input type="text" id="serverPathInput" placeholder="e.g. C:\\Projects\\MyApp" />
+      <div class="modal-buttons">
+        <button onclick="submitNewServer()">Add</button>
+        <button onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Server Modal -->
+  <div id="editServerModal" class="modal-overlay">
+    <div class="modal">
+      <h2>Edit Server</h2>
+      <label for="editServerNameInput">Server Name</label>
+      <input type="text" id="editServerNameInput" />
+      <label for="editServerPathInput">Project Folder Path</label>
+      <input type="text" id="editServerPathInput" />
+      <div class="modal-buttons">
+        <button onclick="submitEditServer()">Update</button>
+        <button onclick="closeEditModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="modal-overlay">
+    <div class="modal settings-modal">
+      <h2>Settings</h2>
+      
+      <div class="settings-group">
+        <h3>Startup</h3>
+        <div class="setting-item">
+          <div>
+            <div>Run NPMate on Windows startup</div>
+            <div class="setting-description">Automatically start NPMate when Windows boots up. Servers marked as "AutoStart" will begin running automatically.</div>
+          </div>
+          <div class="switch-wrapper">
+            <label class="switch">
+              <input type="checkbox" id="runOnStartupToggle" onchange="updateStartupSetting(this.checked)">
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <h3>Interface</h3>
+        <div class="setting-item">
+          <div>
+            <div>Console refresh interval</div>
+            <div class="setting-description">How often to refresh console logs (in milliseconds)</div>
+          </div>
+          <input type="number" id="refreshIntervalInput" min="1000" max="10000" step="500" style="width: 80px;" onchange="updateRefreshInterval(this.value)">
+        </div>
+        <div class="setting-item">
+          <div>
+            <div>Maximum logs per server</div>
+            <div class="setting-description">Maximum number of log entries to keep in memory per server</div>
+          </div>
+          <input type="number" id="maxLogsInput" min="50" max="500" step="50" style="width: 80px;" onchange="updateMaxLogs(this.value)">
+        </div>
+      </div>
+
+      <div class="modal-buttons">
+        <button onclick="closeSettingsModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Console Modal -->
+  <div id="consoleModal" class="modal-overlay">
+    <div class="modal console-modal">
+      <h2 id="consoleTitle">Server Console</h2>
+      <div class="console-content" id="consoleContent"></div>
+      <div class="console-controls">
+        <button onclick="refreshConsole()" class="btn-console">Refresh</button>
+        <button onclick="clearConsole()">Clear Logs</button>
+        <button onclick="closeConsoleModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification -->
+  <div id="notification" class="notification"></div>
+
+  <script>
+    const fs = require('fs');
+    const path = require('path');
+    const { ipcRenderer } = require('electron');
+    const { readRegistry, updateServer, writeRegistry } = require('../registry/serverRegistry');
+    const { startServer, stopServer, isProcessRunning, getServerLogs, clearServerLogs } = require('../controller/serverController');
+
+    let currentConsoleServerId = null;
+    let consoleRefreshInterval = null;
+    let editingServerId = null;
+    let currentSettings = {};
+
+    // Load settings on startup
+    async function loadSettings() {
+      try {
+        currentSettings = await ipcRenderer.invoke('get-settings');
+        updateSettingsUI();
+      } catch (error) {
+        console.error('Failed to load settings:', error);
+      }
+    }
+
+    function updateSettingsUI() {
+      document.getElementById('runOnStartupToggle').checked = currentSettings.runOnStartup || false;
+      document.getElementById('refreshIntervalInput').value = currentSettings.autoRefreshInterval || 2000;
+      document.getElementById('maxLogsInput').value = currentSettings.maxLogsPerServer || 100;
+    }
+
+    async function updateStartupSetting(enabled) {
+      try {
+        const result = await ipcRenderer.invoke('update-setting', 'runOnStartup', enabled);
+        if (result.success) {
+          currentSettings.runOnStartup = enabled;
+          showNotification(`Windows startup ${enabled ? 'enabled' : 'disabled'}`, 'success');
+        } else {
+          showNotification(result.error || 'Failed to update startup setting', 'error');
+          // Revert the toggle
+          document.getElementById('runOnStartupToggle').checked = !enabled;
+        }
+      } catch (error) {
+        console.error('Error updating startup setting:', error);
+        showNotification('Error updating startup setting', 'error');
+        document.getElementById('runOnStartupToggle').checked = !enabled;
+      }
+    }
+
+    async function updateRefreshInterval(value) {
+      const interval = parseInt(value);
+      if (interval < 1000 || interval > 10000) return;
+      
+      try {
+        await ipcRenderer.invoke('update-setting', 'autoRefreshInterval', interval);
+        currentSettings.autoRefreshInterval = interval;
+        showNotification('Refresh interval updated', 'success');
+        
+        // Update active console refresh if running
+        if (consoleRefreshInterval && currentConsoleServerId) {
+          clearInterval(consoleRefreshInterval);
+          consoleRefreshInterval = setInterval(refreshConsole, interval);
+        }
+      } catch (error) {
+        console.error('Error updating refresh interval:', error);
+        showNotification('Failed to update refresh interval', 'error');
+      }
+    }
+
+    async function updateMaxLogs(value) {
+      const maxLogs = parseInt(value);
+      if (maxLogs < 50 || maxLogs > 500) return;
+      
+      try {
+        await ipcRenderer.invoke('update-setting', 'maxLogsPerServer', maxLogs);
+        currentSettings.maxLogsPerServer = maxLogs;
+        showNotification('Max logs setting updated', 'success');
+      } catch (error) {
+        console.error('Error updating max logs:', error);
+        showNotification('Failed to update max logs setting', 'error');
+      }
+    }
+
+    function openSettingsModal() {
+      document.getElementById('settingsModal').style.display = 'flex';
+      loadSettings();
+    }
+
+    function closeSettingsModal() {
+      document.getElementById('settingsModal').style.display = 'none';
+    }
+
+    function showNotification(message, type = 'success') {
+      const notification = document.getElementById('notification');
+      notification.textContent = message;
+      notification.className = `notification ${type}`;
+      notification.classList.add('show');
+      
+      setTimeout(() => {
+        notification.classList.remove('show');
+      }, 3000);
+    }
+
+    // Listen for settings menu trigger from main process
+    ipcRenderer.on('open-settings', () => {
+      openSettingsModal();
+    });
+
+    function loadServers() {
+      let servers = [];
+      try {
+        servers = readRegistry();
+      } catch (err) {
+        console.error('Failed to read registry:', err);
+        return;
+      }
+
+      // Check if previously running servers are still actually running
+      servers.forEach(server => {
+        if (server.status === 'running' && !isProcessRunning(server.pid)) {
+          updateServer(server.id, { status: 'stopped', pid: null });
+        }
+      });
+
+      const container = document.getElementById('serverList');
+      container.innerHTML = '';
+
+      const addBtn = document.createElement('button');
+      addBtn.textContent = '+ Add Server';
+      addBtn.style.marginBottom = '20px';
+      addBtn.onclick = () => openModal();
+      container.appendChild(addBtn);
+
+      // Re-read servers after status updates
+      servers = readRegistry();
+
+      servers.forEach(server => {
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        const title = document.createElement('div');
+        title.className = 'card-title';
+        
+        const statusIndicator = document.createElement('span');
+        statusIndicator.className = `status-indicator ${server.status === 'running' ? 'status-running' : 'status-stopped'}`;
+        
+        title.appendChild(statusIndicator);
+        title.appendChild(document.createTextNode(server.name));
+
+        const details = document.createElement('div');
+        details.className = 'card-details';
+        details.innerHTML = `
+          Path: ${server.path}<br>
+          Status: ${server.status || 'unknown'}${server.pid ? ` (PID: ${server.pid})` : ''}
+        `;
+
+        const buttonGroup = document.createElement('div');
+        buttonGroup.className = 'button-group';
+
+        const startBtn = document.createElement('button');
+        startBtn.textContent = 'Start';
+        startBtn.disabled = server.status === 'running';
+        startBtn.onclick = () => startServerById(server.id);
+
+        const stopBtn = document.createElement('button');
+        stopBtn.textContent = 'Stop';
+        stopBtn.className = 'btn-stop';
+        stopBtn.disabled = server.status !== 'running';
+        stopBtn.onclick = () => stopServerById(server.id);
+
+        const consoleBtn = document.createElement('button');
+        consoleBtn.textContent = 'Console';
+        consoleBtn.className = 'btn-console';
+        consoleBtn.onclick = () => openConsoleModal(server.id, server.name);
+
+        const editBtn = document.createElement('button');
+        editBtn.textContent = 'Edit';
+        editBtn.onclick = () => editServerById(server.id);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.className = 'btn-delete';
+        deleteBtn.onclick = () => deleteServerById(server.id);
+
+        const compatBtn = document.createElement('button');
+        compatBtn.textContent = 'Make NPMate-Compatible';
+        compatBtn.onclick = () => makeCompatible(server.path);
+
+        const autoToggleWrapper = document.createElement('div');
+        autoToggleWrapper.className = 'switch-wrapper';
+        autoToggleWrapper.innerHTML = `
+          <span>AutoStart</span>
+          <label class="switch">
+            <input type="checkbox" ${server.autoStart ? 'checked' : ''} onchange="toggleAutoStart('${server.id}', this.checked)">
+            <span class="slider"></span>
+          </label>
+        `;
+
+        buttonGroup.appendChild(startBtn);
+        buttonGroup.appendChild(stopBtn);
+        buttonGroup.appendChild(consoleBtn);
+        buttonGroup.appendChild(editBtn);
+        buttonGroup.appendChild(deleteBtn);
+        buttonGroup.appendChild(compatBtn);
+        buttonGroup.appendChild(autoToggleWrapper);
+
+        card.appendChild(title);
+        card.appendChild(details);
+        card.appendChild(buttonGroup);
+        container.appendChild(card);
+      });
+    }
+
+    function startServerById(id) {
+      const servers = readRegistry();
+      const server = servers.find(s => s.id === id);
+      if (!server) return console.error(`Server with ID ${id} not found`);
+      startServer(server);
+      setTimeout(loadServers, 1000);
+    }
+
+    function stopServerById(id) {
+      const servers = readRegistry();
+      const server = servers.find(s => s.id === id);
+      if (!server) return console.error(`Server with ID ${id} not found`);
+      
+      console.log(`Attempting to stop server "${server.name}"`);
+      const success = stopServer(server);
+      
+      if (success) {
+        setTimeout(loadServers, 1000);
+      } else {
+        alert(`Failed to stop server "${server.name}". Check console for details.`);
+      }
+    }
+
+    function deleteServerById(id) {
+      const servers = readRegistry();
+      const server = servers.find(s => s.id === id);
+      
+      if (server && server.status === 'running') {
+        if (!confirm(`Server "${server.name}" is currently running. Stop and delete it?`)) {
+          return;
+        }
+        stopServer(server);
+      }
+      
+      if (confirm(`Are you sure you want to delete server "${server ? server.name : id}"?`)) {
+        let updatedServers = readRegistry();
+        updatedServers = updatedServers.filter(s => s.id !== id);
+        writeRegistry(updatedServers);
+        loadServers();
+      }
+    }
+
+    function editServerById(id) {
+      const servers = readRegistry();
+      const server = servers.find(s => s.id === id);
+      if (!server) return;
+
+      editingServerId = id;
+      document.getElementById('editServerNameInput').value = server.name;
+      document.getElementById('editServerPathInput').value = server.path;
+      document.getElementById('editServerModal').style.display = 'flex';
+      
+      // Focus on the first input field after a short delay
+      setTimeout(() => {
+        document.getElementById('editServerNameInput').focus();
+        document.getElementById('editServerNameInput').select();
+      }, 100);
+    }
+
+    function submitEditServer() {
+      if (!editingServerId) {
+        console.error('No server ID set for editing');
+        return;
+      }
+      
+      const nameInput = document.getElementById('editServerNameInput');
+      const pathInput = document.getElementById('editServerPathInput');
+      
+      const newName = nameInput.value.trim();
+      const newPath = pathInput.value.trim();
+      
+      console.log('Edit form values:', { newName, newPath, editingServerId });
+      
+      if (!newName || !newPath) {
+        alert('Both name and path are required.');
+        return;
+      }
+
+      try {
+        updateServer(editingServerId, { name: newName, path: newPath });
+        console.log('Server updated successfully');
+        closeEditModal();
+        loadServers();
+      } catch (error) {
+        console.error('Error updating server:', error);
+        alert(`Failed to update server: ${error.message}`);
+      }
+    }
+
+    function closeEditModal() {
+      document.getElementById('editServerModal').style.display = 'none';
+      document.getElementById('editServerNameInput').value = '';
+      document.getElementById('editServerPathInput').value = '';
+      editingServerId = null;
+    }
+
+    function toggleAutoStart(id, isChecked) {
+      updateServer(id, { autoStart: isChecked });
+      setTimeout(loadServers, 200);
+    }
+
+    function openModal() {
+      document.getElementById('addServerModal').style.display = 'flex';
+    }
+
+    function closeModal() {
+      document.getElementById('addServerModal').style.display = 'none';
+      document.getElementById('serverNameInput').value = '';
+      document.getElementById('serverPathInput').value = '';
+    }
+
+    function submitNewServer() {
+      const name = document.getElementById('serverNameInput').value.trim();
+      const folderPath = document.getElementById('serverPathInput').value.trim();
+
+      if (!name || !folderPath) {
+        alert('Both name and path are required.');
+        return;
+      }
+
+      const servers = readRegistry();
+      const id = `${name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`;
+      const newServer = {
+        id,
+        name,
+        path: folderPath,
+        autoStart: false,
+        status: 'stopped',
+        pid: null
+      };
+
+      servers.push(newServer);
+      writeRegistry(servers);
+      closeModal();
+      loadServers();
+    }
+
+    function openConsoleModal(serverId, serverName) {
+      currentConsoleServerId = serverId;
+      document.getElementById('consoleTitle').textContent = `Console - ${serverName}`;
+      document.getElementById('consoleModal').style.display = 'flex';
+      refreshConsole();
+      
+      // Auto-refresh console using current settings
+      if (consoleRefreshInterval) {
+        clearInterval(consoleRefreshInterval);
+      }
+      const refreshInterval = currentSettings.autoRefreshInterval || 2000;
+      consoleRefreshInterval = setInterval(refreshConsole, refreshInterval);
+    }
+
+    function refreshConsole() {
+      if (!currentConsoleServerId) return;
+      
+      const logs = getServerLogs(currentConsoleServerId);
+      const consoleContent = document.getElementById('consoleContent');
+      
+      if (logs.length === 0) {
+        consoleContent.textContent = 'No logs available for this server.';
+      } else {
+        consoleContent.textContent = logs.join('\n');
+        consoleContent.scrollTop = consoleContent.scrollHeight; // Auto-scroll to bottom
+      }
+    }
+
+    function clearConsole() {
+      if (!currentConsoleServerId) return;
+      
+      if (confirm('Clear all logs for this server?')) {
+        clearServerLogs(currentConsoleServerId);
+        refreshConsole();
+      }
+    }
+
+    function closeConsoleModal() {
+      document.getElementById('consoleModal').style.display = 'none';
+      currentConsoleServerId = null;
+      
+      if (consoleRefreshInterval) {
+        clearInterval(consoleRefreshInterval);
+        consoleRefreshInterval = null;
+      }
+    }
+
+    function makeCompatible(projectPath) {
+      const serverFile = path.join(projectPath, 'server.js');
+      if (!fs.existsSync(serverFile)) {
+        alert('No server.js found in this project.');
+        return;
+      }
+
+      let content = fs.readFileSync(serverFile, 'utf-8');
+
+      // Check if already compatible
+      if (content.includes('server.close') || content.includes('process.on(\'SIGINT\'') || content.includes('process.on("SIGINT"')) {
+        alert('server.js already appears to handle shutdown signals.');
+        return;
+      }
+
+      // First, let's try a simple approach - find any line with .listen(
+      const listenLines = content.split('\n').filter(line => 
+        line.includes('.listen(') && (line.includes('app') || line.includes('server'))
+      );
+
+      if (listenLines.length === 0) {
+        // Show current file content for debugging and offer manual setup
+        const preview = content.substring(0, 500) + (content.length > 500 ? '...' : '');
+        const choice = confirm(
+          `Could not automatically detect app.listen() in your server.js.\n\n` +
+          `Preview of your file:\n${preview}\n\n` +
+          `Would you like to add NPMate compatibility manually?\n\n` +
+          `Click OK to add the shutdown handlers, or Cancel to see the example format.`
+        );
+        
+        if (choice) {
+          // Add shutdown handlers at the end
+          const shutdownHandler = `
+// NPMate compatibility - Clean shutdown handling
+// You may need to manually change 'app.listen(...)' to 'const server = app.listen(...)'
+// and ensure the server variable is available for shutdown
+let server;
+
+function shutdown() {
+  console.log('Shutting down Express server...');
+  if (server) {
+    server.close(() => {
+      console.log('Server closed.');
+      process.exit(0);
+    });
+  } else {
+    console.log('No server instance found, forcing exit.');
+    process.exit(0);
+  }
+}
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
+`;
+
+          const updatedContent = content + shutdownHandler;
+          
+          try {
+            fs.writeFileSync(serverFile + '.backup', content);
+            fs.writeFileSync(serverFile, updatedContent);
+            alert('✅ NPMate shutdown handlers added!\n\n⚠️ IMPORTANT: You need to manually change your app.listen() line to:\n\nconst server = app.listen(PORT, () => {\n  console.log(`Server running on port ${PORT}`);\n});\n\nA backup was created as server.js.backup');
+          } catch (err) {
+            alert(`❌ Failed to update server.js: ${err.message}`);
+          }
+          return;
+        } else {
+          // Show example format
+          alert('Your server.js should have this format:\n\nconst express = require("express");\nconst app = express();\nconst PORT = 3000;\n\napp.get("/", (req, res) => {\n  res.send("Hello World!");\n});\n\napp.listen(PORT, () => {\n  console.log(`Server running on http://localhost:${PORT}`);\n});');
+          return;
+        }
+      }
+
+      // Try to automatically modify the first .listen() line found
+      let foundLine = listenLines[0];
+      let lineNumber = content.split('\n').findIndex(line => line === foundLine);
+      
+      // Extract port from the line (look for numbers or variables)
+      let portMatch = foundLine.match(/\.listen\s*\(\s*([^,)]+)/);
+      if (!portMatch) {
+        alert('Could not extract port from listen line. Please add compatibility manually.');
+        return;
+      }
+      
+      let port = portMatch[1].trim();
+      
+      // Create replacement line
+      let newListenLine;
+      if (foundLine.includes('app.listen')) {
+        newListenLine = `const server = app.listen(${port}, () => {`;
+      } else {
+        newListenLine = `const server = server.listen(${port}, () => {`;
+      }
+      
+      // Add console log
+      newListenLine += `\n  console.log(\`Server running on http://localhost:\${${port}}\`);`;
+      newListenLine += '\n});';
+
+      // Replace the line
+      let lines = content.split('\n');
+      
+      // Find the complete listen block (might span multiple lines)
+      let startLine = lineNumber;
+      let endLine = lineNumber;
+      
+      // Find the end of the listen block
+      let openParens = 0;
+      for (let i = startLine; i < lines.length; i++) {
+        const line = lines[i];
+        openParens += (line.match(/\(/g) || []).length;
+        openParens -= (line.match(/\)/g) || []).length;
+        if (openParens <= 0 && line.includes(')')) {
+          endLine = i;
+          break;
+        }
+      }
+      
+      // Replace the lines
+      lines.splice(startLine, endLine - startLine + 1, newListenLine);
+      
+      // Add shutdown handlers
+      const shutdownHandler = `
+
+// NPMate compatibility - Clean shutdown handling
+function shutdown() {
+  console.log('Shutting down Express server...');
+  if (server) {
+    server.close((err) => {
+      if (err) {
+        console.error('Error closing server:', err);
+        process.exit(1);
+      } else {
+        console.log('Server closed successfully.');
+        process.exit(0);
+      }
+    });
+    
+    // Force exit after 5 seconds if graceful shutdown fails
+    setTimeout(() => {
+      console.log('Forcing server shutdown...');
+      process.exit(1);
+    }, 5000);
+  } else {
+    console.log('No server instance found.');
+    process.exit(0);
+  }
+}
+
+// Handle shutdown signals
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
+
+// Handle uncaught exceptions and rejections
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  shutdown();
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  shutdown();
+});
+`;
+
+      const updatedContent = lines.join('\n') + shutdownHandler;
+
+      try {
+        // Create backup first
+        fs.writeFileSync(serverFile + '.backup', content);
+        fs.writeFileSync(serverFile, updatedContent);
+        alert('✅ server.js updated for NPMate compatibility!\n\n📄 A backup was created as server.js.backup\n\n⚠️ Please check the file to make sure the changes look correct.');
+      } catch (err) {
+        alert(`❌ Failed to update server.js: ${err.message}`);
+      }
+    }
+
+    // Make functions globally available
+    window.toggleAutoStart = toggleAutoStart;
+    window.openModal = openModal;
+    window.closeModal = closeModal;
+    window.submitNewServer = submitNewServer;
+    window.makeCompatible = makeCompatible;
+    window.openSettingsModal = openSettingsModal;
+    window.closeSettingsModal = closeSettingsModal;
+    window.updateStartupSetting = updateStartupSetting;
+    window.updateRefreshInterval = updateRefreshInterval;
+    window.updateMaxLogs = updateMaxLogs;
+
+    // Close modals when clicking overlay
+    document.addEventListener('click', (e) => {
+      if (e.target.classList.contains('modal-overlay')) {
+        if (e.target.id === 'addServerModal') closeModal();
+        if (e.target.id === 'editServerModal') closeEditModal();
+        if (e.target.id === 'consoleModal') closeConsoleModal();
+        if (e.target.id === 'settingsModal') closeSettingsModal();
+      }
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === ',') {
+          e.preventDefault();
+          openSettingsModal();
+        }
+      }
+      
+      // Close modals with Escape key
+      if (e.key === 'Escape') {
+        const openModals = document.querySelectorAll('.modal-overlay[style*="flex"]');
+        openModals.forEach(modal => {
+          modal.style.display = 'none';
+        });
+        
+        // Clear editing state
+        editingServerId = null;
+        currentConsoleServerId = null;
+        if (consoleRefreshInterval) {
+          clearInterval(consoleRefreshInterval);
+          consoleRefreshInterval = null;
+        }
+      }
+    });
+
+    // Load settings and servers when page loads
+    window.onload = () => {
+      loadSettings();
+      loadServers();
+    };
+  </script>
+</body>
+</html>

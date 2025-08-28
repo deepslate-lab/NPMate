@@ -1,0 +1,55 @@
+{
+  "name": "npmate",
+  "version": "1.1.0",
+  "description": "NPMate - Node.js Project Manager with Windows Startup Support",
+  "main": "src/main/index.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "build-win": "electron-builder --win",
+    "dist": "electron-builder --publish=never"
+  },
+  "keywords": [
+    "nodejs",
+    "server",
+    "manager",
+    "electron",
+    "development",
+    "process-control",
+    "windows"
+  ],
+  "author": "DeepslateLab",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^37.4.0",
+    "electron-builder": "^24.0.0"
+  },
+  "build": {
+    "appId": "com.deepslatelab.npmate",
+    "productName": "NPMate",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "backend/**/*",
+      "controller/**/*",
+      "registry/**/*",
+      "data/**/*",
+      "assets/**/*",
+      "server.js",
+      "ecosystem.config.js"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}
