@@ -337,13 +337,30 @@
     .notification.show {
       opacity: 1;
     }
+
+    .loading {
+      text-align: center;
+      color: #888;
+      font-style: italic;
+    }
+
+    .error-message {
+      background-color: #ff4757;
+      color: white;
+      padding: 10px;
+      border-radius: 5px;
+      margin: 10px 0;
+      font-size: 12px;
+    }
   </style>
 </head>
 <body>
   <button class="btn-settings" onclick="openSettingsModal()">⚙️ Settings</button>
   
   <h1>NPMate ■</h1>
-  <div class="server-list" id="serverList"></div>
+  <div class="server-list" id="serverList">
+    <div class="loading">Loading servers...</div>
+  </div>
 
   <!-- Add Server Modal -->
   <div id="addServerModal" class="modal-overlay">
@@ -437,11 +454,14 @@
   <div id="notification" class="notification"></div>
 
   <script>
-    const fs = require('fs');
-    const path = require('path');
-    const { ipcRenderer } = require('electron');
-    const { readRegistry, updateServer, writeRegistry } = require('../registry/serverRegistry');
-    const { startServer, stopServer, isProcessRunning, getServerLogs, clearServerLogs } = require('../controller/serverController');
+    // Check if electronAPI is available
+    if (typeof window.electronAPI === 'undefined') {
+      document.getElementById('serverList').innerHTML = `
+        <div class="error-message">
+          <strong>Error:</strong> electronAPI is not available. Please check your preload.js file.
+        </div>
+      `;
+    }
 
     let currentConsoleServerId = null;
     let consoleRefreshInterval = null;
@@ -451,28 +471,41 @@
     // Load settings on startup
     async function loadSettings() {
       try {
-        currentSettings = await ipcRenderer.invoke('get-settings');
+        if (!window.electronAPI) {
+          console.error('electronAPI not available');
+          return;
+        }
+        currentSettings = await window.electronAPI.getSettings();
         updateSettingsUI();
       } catch (error) {
         console.error('Failed to load settings:', error);
+        showNotification('Failed to load settings', 'error');
       }
     }
 
     function updateSettingsUI() {
-      document.getElementById('runOnStartupToggle').checked = currentSettings.runOnStartup || false;
-      document.getElementById('refreshIntervalInput').value = currentSettings.autoRefreshInterval || 2000;
-      document.getElementById('maxLogsInput').value = currentSettings.maxLogsPerServer || 100;
+      const startupToggle = document.getElementById('runOnStartupToggle');
+      const refreshInput = document.getElementById('refreshIntervalInput');
+      const maxLogsInput = document.getElementById('maxLogsInput');
+      
+      if (startupToggle) startupToggle.checked = currentSettings.runOnStartup || false;
+      if (refreshInput) refreshInput.value = currentSettings.autoRefreshInterval || 2000;
+      if (maxLogsInput) maxLogsInput.value = currentSettings.maxLogsPerServer || 100;
     }
 
     async function updateStartupSetting(enabled) {
       try {
-        const result = await ipcRenderer.invoke('update-setting', 'runOnStartup', enabled);
+        if (!window.electronAPI) {
+          showNotification('electronAPI not available', 'error');
+          return;
+        }
+        
+        const result = await window.electronAPI.updateSetting('runOnStartup', enabled);
         if (result.success) {
           currentSettings.runOnStartup = enabled;
           showNotification(`Windows startup ${enabled ? 'enabled' : 'disabled'}`, 'success');
         } else {
           showNotification(result.error || 'Failed to update startup setting', 'error');
-          // Revert the toggle
           document.getElementById('runOnStartupToggle').checked = !enabled;
         }
       } catch (error) {
@@ -487,11 +520,11 @@
       if (interval < 1000 || interval > 10000) return;
       
       try {
-        await ipcRenderer.invoke('update-setting', 'autoRefreshInterval', interval);
+        if (!window.electronAPI) return;
+        await window.electronAPI.updateSetting('autoRefreshInterval', interval);
         currentSettings.autoRefreshInterval = interval;
         showNotification('Refresh interval updated', 'success');
         
-        // Update active console refresh if running
         if (consoleRefreshInterval && currentConsoleServerId) {
           clearInterval(consoleRefreshInterval);
           consoleRefreshInterval = setInterval(refreshConsole, interval);
@@ -507,7 +540,8 @@
       if (maxLogs < 50 || maxLogs > 500) return;
       
       try {
-        await ipcRenderer.invoke('update-setting', 'maxLogsPerServer', maxLogs);
+        if (!window.electronAPI) return;
+        await window.electronAPI.updateSetting('maxLogsPerServer', maxLogs);
         currentSettings.maxLogsPerServer = maxLogs;
         showNotification('Max logs setting updated', 'success');
       } catch (error) {
@@ -536,26 +570,42 @@
       }, 3000);
     }
 
-    // Listen for settings menu trigger from main process
-    ipcRenderer.on('open-settings', () => {
-      openSettingsModal();
-    });
-
-    function loadServers() {
+    async function loadServers() {
       let servers = [];
       try {
-        servers = readRegistry();
+        if (!window.electronAPI) {
+          document.getElementById('serverList').innerHTML = `
+            <div class="error-message">
+              <strong>Error:</strong> Unable to load servers - electronAPI not available
+            </div>
+          `;
+          return;
+        }
+
+        servers = await window.electronAPI.readRegistry();
       } catch (err) {
         console.error('Failed to read registry:', err);
+        document.getElementById('serverList').innerHTML = `
+          <div class="error-message">
+            <strong>Error:</strong> Failed to load servers: ${err.message}
+          </div>
+        `;
         return;
       }
 
       // Check if previously running servers are still actually running
-      servers.forEach(server => {
-        if (server.status === 'running' && !isProcessRunning(server.pid)) {
-          updateServer(server.id, { status: 'stopped', pid: null });
+      for (const server of servers) {
+        if (server.status === 'running') {
+          try {
+            const isRunning = await window.electronAPI.isProcessRunning(server.pid);
+            if (!isRunning) {
+              await window.electronAPI.updateServer(server.id, { status: 'stopped', pid: null });
+            }
+          } catch (error) {
+            console.error('Error checking process status:', error);
+          }
         }
-      });
+      }
 
       const container = document.getElementById('serverList');
       container.innerHTML = '';
@@ -567,7 +617,11 @@
       container.appendChild(addBtn);
 
       // Re-read servers after status updates
-      servers = readRegistry();
+      try {
+        servers = await window.electronAPI.readRegistry();
+      } catch (error) {
+        console.error('Error re-reading servers:', error);
+      }
 
       servers.forEach(server => {
         const card = document.createElement('div');
@@ -646,68 +700,99 @@
       });
     }
 
-    function startServerById(id) {
-      const servers = readRegistry();
-      const server = servers.find(s => s.id === id);
-      if (!server) return console.error(`Server with ID ${id} not found`);
-      startServer(server);
-      setTimeout(loadServers, 1000);
-    }
-
-    function stopServerById(id) {
-      const servers = readRegistry();
-      const server = servers.find(s => s.id === id);
-      if (!server) return console.error(`Server with ID ${id} not found`);
+    async function startServerById(id) {
+      if (!window.electronAPI) return;
       
-      console.log(`Attempting to stop server "${server.name}"`);
-      const success = stopServer(server);
-      
-      if (success) {
+      try {
+        const servers = await window.electronAPI.readRegistry();
+        const server = servers.find(s => s.id === id);
+        if (!server) return console.error(`Server with ID ${id} not found`);
+        
+        await window.electronAPI.startServer(server);
+        showNotification(`Starting ${server.name}...`, 'success');
         setTimeout(loadServers, 1000);
-      } else {
-        alert(`Failed to stop server "${server.name}". Check console for details.`);
+      } catch (error) {
+        console.error('Error starting server:', error);
+        showNotification('Failed to start server', 'error');
       }
     }
 
-    function deleteServerById(id) {
-      const servers = readRegistry();
-      const server = servers.find(s => s.id === id);
+    async function stopServerById(id) {
+      if (!window.electronAPI) return;
       
-      if (server && server.status === 'running') {
-        if (!confirm(`Server "${server.name}" is currently running. Stop and delete it?`)) {
-          return;
+      try {
+        const servers = await window.electronAPI.readRegistry();
+        const server = servers.find(s => s.id === id);
+        if (!server) return console.error(`Server with ID ${id} not found`);
+        
+        console.log(`Attempting to stop server "${server.name}"`);
+        const success = await window.electronAPI.stopServer(server);
+        
+        if (success) {
+          showNotification(`Stopping ${server.name}...`, 'success');
+          setTimeout(loadServers, 1000);
+        } else {
+          showNotification(`Failed to stop server "${server.name}"`, 'error');
         }
-        stopServer(server);
-      }
-      
-      if (confirm(`Are you sure you want to delete server "${server ? server.name : id}"?`)) {
-        let updatedServers = readRegistry();
-        updatedServers = updatedServers.filter(s => s.id !== id);
-        writeRegistry(updatedServers);
-        loadServers();
+      } catch (error) {
+        console.error('Error stopping server:', error);
+        showNotification('Failed to stop server', 'error');
       }
     }
 
-    function editServerById(id) {
-      const servers = readRegistry();
-      const server = servers.find(s => s.id === id);
-      if (!server) return;
-
-      editingServerId = id;
-      document.getElementById('editServerNameInput').value = server.name;
-      document.getElementById('editServerPathInput').value = server.path;
-      document.getElementById('editServerModal').style.display = 'flex';
+    async function deleteServerById(id) {
+      if (!window.electronAPI) return;
       
-      // Focus on the first input field after a short delay
-      setTimeout(() => {
-        document.getElementById('editServerNameInput').focus();
-        document.getElementById('editServerNameInput').select();
-      }, 100);
+      try {
+        const servers = await window.electronAPI.readRegistry();
+        const server = servers.find(s => s.id === id);
+        
+        if (server && server.status === 'running') {
+          if (!confirm(`Server "${server.name}" is currently running. Stop and delete it?`)) {
+            return;
+          }
+          await window.electronAPI.stopServer(server);
+        }
+        
+        if (confirm(`Are you sure you want to delete server "${server ? server.name : id}"?`)) {
+          let updatedServers = await window.electronAPI.readRegistry();
+          updatedServers = updatedServers.filter(s => s.id !== id);
+          await window.electronAPI.writeRegistry(updatedServers);
+          showNotification('Server deleted', 'success');
+          loadServers();
+        }
+      } catch (error) {
+        console.error('Error deleting server:', error);
+        showNotification('Failed to delete server', 'error');
+      }
     }
 
-    function submitEditServer() {
-      if (!editingServerId) {
-        console.error('No server ID set for editing');
+    async function editServerById(id) {
+      if (!window.electronAPI) return;
+      
+      try {
+        const servers = await window.electronAPI.readRegistry();
+        const server = servers.find(s => s.id === id);
+        if (!server) return;
+
+        editingServerId = id;
+        document.getElementById('editServerNameInput').value = server.name;
+        document.getElementById('editServerPathInput').value = server.path;
+        document.getElementById('editServerModal').style.display = 'flex';
+        
+        setTimeout(() => {
+          document.getElementById('editServerNameInput').focus();
+          document.getElementById('editServerNameInput').select();
+        }, 100);
+      } catch (error) {
+        console.error('Error loading server for edit:', error);
+        showNotification('Failed to load server details', 'error');
+      }
+    }
+
+    async function submitEditServer() {
+      if (!editingServerId || !window.electronAPI) {
+        console.error('No server ID set for editing or electronAPI not available');
         return;
       }
       
@@ -717,21 +802,20 @@
       const newName = nameInput.value.trim();
       const newPath = pathInput.value.trim();
       
-      console.log('Edit form values:', { newName, newPath, editingServerId });
-      
       if (!newName || !newPath) {
         alert('Both name and path are required.');
         return;
       }
 
       try {
-        updateServer(editingServerId, { name: newName, path: newPath });
+        await window.electronAPI.updateServer(editingServerId, { name: newName, path: newPath });
         console.log('Server updated successfully');
+        showNotification('Server updated', 'success');
         closeEditModal();
         loadServers();
       } catch (error) {
         console.error('Error updating server:', error);
-        alert(`Failed to update server: ${error.message}`);
+        showNotification(`Failed to update server: ${error.message}`, 'error');
       }
     }
 
@@ -742,13 +826,23 @@
       editingServerId = null;
     }
 
-    function toggleAutoStart(id, isChecked) {
-      updateServer(id, { autoStart: isChecked });
-      setTimeout(loadServers, 200);
+    async function toggleAutoStart(id, isChecked) {
+      if (!window.electronAPI) return;
+      
+      try {
+        await window.electronAPI.updateServer(id, { autoStart: isChecked });
+        setTimeout(loadServers, 200);
+      } catch (error) {
+        console.error('Error toggling auto start:', error);
+        showNotification('Failed to update auto start setting', 'error');
+      }
     }
 
     function openModal() {
       document.getElementById('addServerModal').style.display = 'flex';
+      setTimeout(() => {
+        document.getElementById('serverNameInput').focus();
+      }, 100);
     }
 
     function closeModal() {
@@ -757,7 +851,7 @@
       document.getElementById('serverPathInput').value = '';
     }
 
-    function submitNewServer() {
+    async function submitNewServer() {
       const name = document.getElementById('serverNameInput').value.trim();
       const folderPath = document.getElementById('serverPathInput').value.trim();
 
@@ -766,30 +860,42 @@
         return;
       }
 
-      const servers = readRegistry();
-      const id = `${name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`;
-      const newServer = {
-        id,
-        name,
-        path: folderPath,
-        autoStart: false,
-        status: 'stopped',
-        pid: null
-      };
+      if (!window.electronAPI) {
+        showNotification('electronAPI not available', 'error');
+        return;
+      }
 
-      servers.push(newServer);
-      writeRegistry(servers);
-      closeModal();
-      loadServers();
+      try {
+        const servers = await window.electronAPI.readRegistry();
+        const id = `${name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`;
+        const newServer = {
+          id,
+          name,
+          path: folderPath,
+          autoStart: false,
+          status: 'stopped',
+          pid: null
+        };
+
+        servers.push(newServer);
+        await window.electronAPI.writeRegistry(servers);
+        showNotification('Server added successfully', 'success');
+        closeModal();
+        loadServers();
+      } catch (error) {
+        console.error('Error adding server:', error);
+        showNotification('Failed to add server', 'error');
+      }
     }
 
-    function openConsoleModal(serverId, serverName) {
+    async function openConsoleModal(serverId, serverName) {
+      if (!window.electronAPI) return;
+      
       currentConsoleServerId = serverId;
       document.getElementById('consoleTitle').textContent = `Console - ${serverName}`;
       document.getElementById('consoleModal').style.display = 'flex';
       refreshConsole();
       
-      // Auto-refresh console using current settings
       if (consoleRefreshInterval) {
         clearInterval(consoleRefreshInterval);
       }
@@ -797,26 +903,37 @@
       consoleRefreshInterval = setInterval(refreshConsole, refreshInterval);
     }
 
-    function refreshConsole() {
-      if (!currentConsoleServerId) return;
+    async function refreshConsole() {
+      if (!currentConsoleServerId || !window.electronAPI) return;
       
-      const logs = getServerLogs(currentConsoleServerId);
-      const consoleContent = document.getElementById('consoleContent');
-      
-      if (logs.length === 0) {
-        consoleContent.textContent = 'No logs available for this server.';
-      } else {
-        consoleContent.textContent = logs.join('\n');
-        consoleContent.scrollTop = consoleContent.scrollHeight; // Auto-scroll to bottom
+      try {
+        const logs = await window.electronAPI.getServerLogs(currentConsoleServerId);
+        const consoleContent = document.getElementById('consoleContent');
+        
+        if (logs.length === 0) {
+          consoleContent.textContent = 'No logs available for this server.';
+        } else {
+          consoleContent.textContent = logs.join('\n');
+          consoleContent.scrollTop = consoleContent.scrollHeight;
+        }
+      } catch (error) {
+        console.error('Error refreshing console:', error);
+        document.getElementById('consoleContent').textContent = 'Error loading logs.';
       }
     }
 
-    function clearConsole() {
-      if (!currentConsoleServerId) return;
+    async function clearConsole() {
+      if (!currentConsoleServerId || !window.electronAPI) return;
       
       if (confirm('Clear all logs for this server?')) {
-        clearServerLogs(currentConsoleServerId);
-        refreshConsole();
+        try {
+          await window.electronAPI.clearServerLogs(currentConsoleServerId);
+          refreshConsole();
+          showNotification('Console logs cleared', 'success');
+        } catch (error) {
+          console.error('Error clearing console:', error);
+          showNotification('Failed to clear console logs', 'error');
+        }
       }
     }
 
@@ -830,39 +947,47 @@
       }
     }
 
-    function makeCompatible(projectPath) {
-      const serverFile = path.join(projectPath, 'server.js');
-      if (!fs.existsSync(serverFile)) {
-        alert('No server.js found in this project.');
+    async function makeCompatible(projectPath) {
+      if (!window.electronAPI) {
+        showNotification('electronAPI not available', 'error');
         return;
       }
 
-      let content = fs.readFileSync(serverFile, 'utf-8');
-
-      // Check if already compatible
-      if (content.includes('server.close') || content.includes('process.on(\'SIGINT\'') || content.includes('process.on("SIGINT"')) {
-        alert('server.js already appears to handle shutdown signals.');
-        return;
-      }
-
-      // First, let's try a simple approach - find any line with .listen(
-      const listenLines = content.split('\n').filter(line => 
-        line.includes('.listen(') && (line.includes('app') || line.includes('server'))
-      );
-
-      if (listenLines.length === 0) {
-        // Show current file content for debugging and offer manual setup
-        const preview = content.substring(0, 500) + (content.length > 500 ? '...' : '');
-        const choice = confirm(
-          `Could not automatically detect app.listen() in your server.js.\n\n` +
-          `Preview of your file:\n${preview}\n\n` +
-          `Would you like to add NPMate compatibility manually?\n\n` +
-          `Click OK to add the shutdown handlers, or Cancel to see the example format.`
-        );
+      try {
+        const serverFile = await window.electronAPI.joinPath(projectPath, 'server.js');
         
-        if (choice) {
-          // Add shutdown handlers at the end
-          const shutdownHandler = `
+        const fileExists = await window.electronAPI.checkFileExists(serverFile);
+        if (!fileExists) {
+          alert('No server.js found in this project.');
+          return;
+        }
+
+        let content = await window.electronAPI.readFile(serverFile, 'utf-8');
+
+        // Check if already compatible
+        if (content.includes('server.close') || content.includes('process.on(\'SIGINT\'') || content.includes('process.on("SIGINT"')) {
+          alert('server.js already appears to handle shutdown signals.');
+          return;
+        }
+
+        // Find any line with .listen(
+        const listenLines = content.split('\n').filter(line => 
+          line.includes('.listen(') && (line.includes('app') || line.includes('server'))
+        );
+
+        if (listenLines.length === 0) {
+          // Show current file content for debugging and offer manual setup
+          const preview = content.substring(0, 500) + (content.length > 500 ? '...' : '');
+          const choice = confirm(
+            `Could not automatically detect app.listen() in your server.js.\n\n` +
+            `Preview of your file:\n${preview}\n\n` +
+            `Would you like to add NPMate compatibility manually?\n\n` +
+            `Click OK to add the shutdown handlers, or Cancel to see the example format.`
+          );
+          
+          if (choice) {
+            // Add shutdown handlers at the end
+            const shutdownHandler = `
 // NPMate compatibility - Clean shutdown handling
 // You may need to manually change 'app.listen(...)' to 'const server = app.listen(...)'
 // and ensure the server variable is available for shutdown
@@ -885,72 +1010,72 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 `;
 
-          const updatedContent = content + shutdownHandler;
-          
-          try {
-            fs.writeFileSync(serverFile + '.backup', content);
-            fs.writeFileSync(serverFile, updatedContent);
-            alert('✅ NPMate shutdown handlers added!\n\n⚠️ IMPORTANT: You need to manually change your app.listen() line to:\n\nconst server = app.listen(PORT, () => {\n  console.log(`Server running on port ${PORT}`);\n});\n\nA backup was created as server.js.backup');
-          } catch (err) {
-            alert(`❌ Failed to update server.js: ${err.message}`);
+            const updatedContent = content + shutdownHandler;
+            
+            try {
+              await window.electronAPI.writeFile(serverFile + '.backup', content);
+              await window.electronAPI.writeFile(serverFile, updatedContent);
+              alert('✅ NPMate shutdown handlers added!\n\n⚠️ IMPORTANT: You need to manually change your app.listen() line to:\n\nconst server = app.listen(PORT, () => {\n  console.log(`Server running on port ${PORT}`);\n});\n\nA backup was created as server.js.backup');
+            } catch (err) {
+              alert(`❌ Failed to update server.js: ${err.message}`);
+            }
+            return;
+          } else {
+            // Show example format
+            alert('Your server.js should have this format:\n\nconst express = require("express");\nconst app = express();\nconst PORT = 3000;\n\napp.get("/", (req, res) => {\n  res.send("Hello World!");\n});\n\napp.listen(PORT, () => {\n  console.log(`Server running on http://localhost:${PORT}`);\n});');
+            return;
           }
+        }
+
+        // Try to automatically modify the first .listen() line found
+        let foundLine = listenLines[0];
+        let lineNumber = content.split('\n').findIndex(line => line === foundLine);
+        
+        // Extract port from the line
+        let portMatch = foundLine.match(/\.listen\s*\(\s*([^,)]+)/);
+        if (!portMatch) {
+          alert('Could not extract port from listen line. Please add compatibility manually.');
           return;
+        }
+        
+        let port = portMatch[1].trim();
+        
+        // Create replacement line
+        let newListenLine;
+        if (foundLine.includes('app.listen')) {
+          newListenLine = `const server = app.listen(${port}, () => {`;
         } else {
-          // Show example format
-          alert('Your server.js should have this format:\n\nconst express = require("express");\nconst app = express();\nconst PORT = 3000;\n\napp.get("/", (req, res) => {\n  res.send("Hello World!");\n});\n\napp.listen(PORT, () => {\n  console.log(`Server running on http://localhost:${PORT}`);\n});');
-          return;
+          newListenLine = `const server = server.listen(${port}, () => {`;
         }
-      }
+        
+        // Add console log
+        newListenLine += `\n  console.log(\`Server running on http://localhost:\${${port}}\`);`;
+        newListenLine += '\n});';
 
-      // Try to automatically modify the first .listen() line found
-      let foundLine = listenLines[0];
-      let lineNumber = content.split('\n').findIndex(line => line === foundLine);
-      
-      // Extract port from the line (look for numbers or variables)
-      let portMatch = foundLine.match(/\.listen\s*\(\s*([^,)]+)/);
-      if (!portMatch) {
-        alert('Could not extract port from listen line. Please add compatibility manually.');
-        return;
-      }
-      
-      let port = portMatch[1].trim();
-      
-      // Create replacement line
-      let newListenLine;
-      if (foundLine.includes('app.listen')) {
-        newListenLine = `const server = app.listen(${port}, () => {`;
-      } else {
-        newListenLine = `const server = server.listen(${port}, () => {`;
-      }
-      
-      // Add console log
-      newListenLine += `\n  console.log(\`Server running on http://localhost:\${${port}}\`);`;
-      newListenLine += '\n});';
-
-      // Replace the line
-      let lines = content.split('\n');
-      
-      // Find the complete listen block (might span multiple lines)
-      let startLine = lineNumber;
-      let endLine = lineNumber;
-      
-      // Find the end of the listen block
-      let openParens = 0;
-      for (let i = startLine; i < lines.length; i++) {
-        const line = lines[i];
-        openParens += (line.match(/\(/g) || []).length;
-        openParens -= (line.match(/\)/g) || []).length;
-        if (openParens <= 0 && line.includes(')')) {
-          endLine = i;
-          break;
+        // Replace the line
+        let lines = content.split('\n');
+        
+        // Find the complete listen block
+        let startLine = lineNumber;
+        let endLine = lineNumber;
+        
+        // Find the end of the listen block
+        let openParens = 0;
+        for (let i = startLine; i < lines.length; i++) {
+          const line = lines[i];
+          openParens += (line.match(/\(/g) || []).length;
+          openParens -= (line.match(/\)/g) || []).length;
+          if (openParens <= 0 && line.includes(')')) {
+            endLine = i;
+            break;
+          }
         }
-      }
-      
-      // Replace the lines
-      lines.splice(startLine, endLine - startLine + 1, newListenLine);
-      
-      // Add shutdown handlers
-      const shutdownHandler = `
+        
+        // Replace the lines
+        lines.splice(startLine, endLine - startLine + 1, newListenLine);
+        
+        // Add shutdown handlers
+        const shutdownHandler = `
 
 // NPMate compatibility - Clean shutdown handling
 function shutdown() {
@@ -993,15 +1118,21 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 `;
 
-      const updatedContent = lines.join('\n') + shutdownHandler;
+        const updatedContent = lines.join('\n') + shutdownHandler;
 
-      try {
-        // Create backup first
-        fs.writeFileSync(serverFile + '.backup', content);
-        fs.writeFileSync(serverFile, updatedContent);
-        alert('✅ server.js updated for NPMate compatibility!\n\n📄 A backup was created as server.js.backup\n\n⚠️ Please check the file to make sure the changes look correct.');
-      } catch (err) {
-        alert(`❌ Failed to update server.js: ${err.message}`);
+        try {
+          // Create backup first
+          await window.electronAPI.writeFile(serverFile + '.backup', content);
+          await window.electronAPI.writeFile(serverFile, updatedContent);
+          alert('✅ server.js updated for NPMate compatibility!\n\n📄 A backup was created as server.js.backup\n\n⚠️ Please check the file to make sure the changes look correct.');
+          showNotification('Server made NPMate-compatible', 'success');
+        } catch (err) {
+          alert(`❌ Failed to update server.js: ${err.message}`);
+          showNotification('Failed to make server compatible', 'error');
+        }
+      } catch (error) {
+        console.error('Error in makeCompatible:', error);
+        showNotification('Error making server compatible', 'error');
       }
     }
 
@@ -1016,6 +1147,11 @@ process.on('unhandledRejection', (reason, promise) => {
     window.updateStartupSetting = updateStartupSetting;
     window.updateRefreshInterval = updateRefreshInterval;
     window.updateMaxLogs = updateMaxLogs;
+    window.submitEditServer = submitEditServer;
+    window.closeEditModal = closeEditModal;
+    window.refreshConsole = refreshConsole;
+    window.clearConsole = clearConsole;
+    window.closeConsoleModal = closeConsoleModal;
 
     // Close modals when clicking overlay
     document.addEventListener('click', (e) => {
@@ -1053,11 +1189,27 @@ process.on('unhandledRejection', (reason, promise) => {
       }
     });
 
+    // Listen for settings menu trigger from main process
+    if (window.electronAPI && window.electronAPI.onOpenSettings) {
+      window.electronAPI.onOpenSettings(() => {
+        openSettingsModal();
+      });
+    }
+
     // Load settings and servers when page loads
-    window.onload = () => {
+    window.addEventListener('DOMContentLoaded', () => {
       loadSettings();
       loadServers();
-    };
+    });
+
+    // Also try loading immediately in case DOMContentLoaded already fired
+    if (document.readyState === 'loading') {
+      // Wait for DOMContentLoaded
+    } else {
+      // DOM is already ready
+      loadSettings();
+      loadServers();
+    }
   </script>
 </body>
 </html>

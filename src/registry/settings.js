@@ -4,7 +4,17 @@ const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
 
-const settingsPath = path.join(__dirname, '../../data/settings.json');
+// Use app.getPath('userData') for packaged apps
+function getDataPath() {
+  try {
+    return app.getPath('userData');
+  } catch {
+    // Fallback for development
+    return path.join(__dirname, '../../data');
+  }
+}
+
+const settingsPath = path.join(getDataPath(), 'settings.json');
 
 // Default settings
 const defaultSettings = {
@@ -14,15 +24,26 @@ const defaultSettings = {
   maxLogsPerServer: 100
 };
 
+function ensureDataDirectory() {
+  const dataDir = path.dirname(settingsPath);
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+}
+
 function readSettings() {
   try {
+    ensureDataDirectory();
+    
     if (!fs.existsSync(settingsPath)) {
       // Create settings file with defaults if it doesn't exist
       writeSettings(defaultSettings);
       return defaultSettings;
     }
     
-    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    const data = fs.readFileSync(settingsPath, 'utf8');
+    const settings = JSON.parse(data);
+    
     // Merge with defaults to ensure all settings exist
     return { ...defaultSettings, ...settings };
   } catch (error) {
@@ -33,12 +54,7 @@ function readSettings() {
 
 function writeSettings(settings) {
   try {
-    // Ensure data directory exists
-    const dataDir = path.dirname(settingsPath);
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
-    }
-    
+    ensureDataDirectory();
     fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
     return true;
   } catch (error) {
@@ -48,18 +64,28 @@ function writeSettings(settings) {
 }
 
 function updateSetting(key, value) {
-  const settings = readSettings();
-  settings[key] = value;
-  return writeSettings(settings);
+  try {
+    const settings = readSettings();
+    settings[key] = value;
+    return writeSettings(settings);
+  } catch (error) {
+    console.error('Error updating setting:', error);
+    return false;
+  }
 }
 
 function getSetting(key) {
-  const settings = readSettings();
-  return settings[key];
+  try {
+    const settings = readSettings();
+    return settings[key];
+  } catch (error) {
+    console.error('Error getting setting:', error);
+    return defaultSettings[key];
+  }
 }
 
 // Windows startup functionality
-function setWindowsStartup(enable) {
+async function setWindowsStartup(enable) {
   try {
     if (process.platform !== 'win32') {
       console.log('Startup setting is only supported on Windows');
@@ -83,7 +109,7 @@ function setWindowsStartup(enable) {
       const powershellScript = `
         $WshShell = New-Object -comObject WScript.Shell
         $Shortcut = $WshShell.CreateShortcut("${startupPath}")
-        $Shortcut.TargetPath = "${appPath}"
+        $Shortcut.TargetPath = "${appPath.replace(/\\/g, '\\\\')}"
         $Shortcut.Arguments = "--startup"
         $Shortcut.Description = "NPMate - Node.js Project Manager"
         $Shortcut.Save()
@@ -99,7 +125,7 @@ function setWindowsStartup(enable) {
             console.log('Startup shortcut created successfully');
             resolve(true);
           } else {
-            console.error('Failed to create startup shortcut');
+            console.error('Failed to create startup shortcut, exit code:', code);
             resolve(false);
           }
         });
@@ -111,12 +137,16 @@ function setWindowsStartup(enable) {
       });
     } else {
       // Remove startup shortcut
-      if (fs.existsSync(startupPath)) {
-        fs.unlinkSync(startupPath);
-        console.log('Startup shortcut removed');
+      try {
+        if (fs.existsSync(startupPath)) {
+          fs.unlinkSync(startupPath);
+          console.log('Startup shortcut removed');
+        }
         return true;
+      } catch (error) {
+        console.error('Error removing startup shortcut:', error);
+        return false;
       }
-      return true;
     }
   } catch (error) {
     console.error('Error managing Windows startup:', error);
