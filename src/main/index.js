@@ -1,6 +1,6 @@
 //src/main/index.js
 
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Tray, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { 
@@ -14,8 +14,12 @@ const {
 const { readRegistry, updateServer, writeRegistry } = require('../registry/serverRegistry');
 const { readSettings, updateSetting, setWindowsStartup } = require('../registry/settings');
 
+let mainWindow;
+let tray;
+let isQuitting = false;
+
 function createWindow() {
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 900,
     height: 700,
     webPreferences: {
@@ -25,11 +29,151 @@ function createWindow() {
     }
   });
 
-  win.loadFile(path.join(__dirname, '../renderer/index.html'));
+  mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+  
+  // Handle window close event
+  mainWindow.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      showCloseDialog();
+    }
+  });
   
   // Open DevTools in development
   if (process.env.NODE_ENV === 'development') {
-    win.webContents.openDevTools();
+    mainWindow.webContents.openDevTools();
+  }
+}
+
+function showCloseDialog() {
+  const runningServers = getRunningProcesses();
+  const serverCount = runningServers.length;
+  
+  let message = 'What would you like to do?';
+  if (serverCount > 0) {
+    message = `You have ${serverCount} server(s) running. What would you like to do?`;
+  }
+
+  const response = dialog.showMessageBoxSync(mainWindow, {
+    type: 'question',
+    title: 'NPMate',
+    message: message,
+    detail: serverCount > 0 ? 'Minimizing to tray will keep servers running in the background.' : '',
+    buttons: ['Minimize to Tray', 'Exit App', 'Cancel'],
+    defaultId: 0,
+    cancelId: 2
+  });
+
+  if (response === 0) {
+    // Minimize to tray
+    mainWindow.hide();
+    if (!tray) {
+      createTray();
+    }
+    showTrayNotification();
+  } else if (response === 1) {
+    // Exit app
+    isQuitting = true;
+    app.quit();
+  }
+  // If Cancel (response === 2), do nothing
+}
+
+function createTray() {
+  // Use the existing icon from assets folder
+  const iconPath = path.join(__dirname, '../../assets/icon.ico');
+  
+  tray = new Tray(iconPath);
+  
+  updateTrayMenu();
+  
+  tray.setToolTip('NPMate - Node.js Server Manager');
+  
+  // Double-click to show window
+  tray.on('double-click', () => {
+    showMainWindow();
+  });
+
+  // Single click to show context menu (Windows behavior)
+  tray.on('click', () => {
+    updateTrayMenu();
+  });
+}
+
+function updateTrayMenu() {
+  if (!tray) return;
+  
+  const servers = readRegistry();
+  const runningServers = servers.filter(s => s.status === 'running');
+  
+  let menuTemplate = [
+    {
+      label: 'Show NPMate',
+      click: () => showMainWindow()
+    },
+    { type: 'separator' }
+  ];
+  
+  if (runningServers.length > 0) {
+    menuTemplate.push({
+      label: `Running Servers (${runningServers.length})`,
+      enabled: false
+    });
+    
+    runningServers.forEach(server => {
+      menuTemplate.push({
+        label: `  ${server.name}`,
+        enabled: false,
+        icon: path.join(__dirname, '../../assets/icon.ico'),
+        type: 'normal'
+      });
+    });
+    
+    menuTemplate.push({ type: 'separator' });
+  } else {
+    menuTemplate.push({
+      label: 'No running servers',
+      enabled: false
+    });
+    menuTemplate.push({ type: 'separator' });
+  }
+  
+  menuTemplate.push(
+    {
+      label: 'Refresh Status',
+      click: () => updateTrayMenu()
+    },
+    { type: 'separator' },
+    {
+      label: 'Exit NPMate',
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      }
+    }
+  );
+  
+  const contextMenu = Menu.buildFromTemplate(menuTemplate);
+  tray.setContextMenu(contextMenu);
+}
+
+function showMainWindow() {
+  if (mainWindow) {
+    mainWindow.show();
+    mainWindow.focus();
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+  }
+}
+
+function showTrayNotification() {
+  if (tray) {
+    tray.displayBalloon({
+      iconType: 'info',
+      title: 'NPMate',
+      content: 'NPMate is now running in the background. Double-click the tray icon to open.'
+    });
   }
 }
 
@@ -85,7 +229,12 @@ ipcMain.handle('write-registry', async (event, data) => {
 
 ipcMain.handle('update-server', async (event, id, updates) => {
   try {
-    return updateServer(id, updates);
+    const result = updateServer(id, updates);
+    // Update tray menu when server status changes
+    if (tray) {
+      setTimeout(() => updateTrayMenu(), 100);
+    }
+    return result;
   } catch (error) {
     console.error('Error updating server:', error);
     return false;
@@ -95,6 +244,10 @@ ipcMain.handle('update-server', async (event, id, updates) => {
 ipcMain.handle('start-server', async (event, server) => {
   try {
     startServer(server);
+    // Update tray menu after starting server
+    if (tray) {
+      setTimeout(() => updateTrayMenu(), 1000);
+    }
     return true;
   } catch (error) {
     console.error('Error starting server:', error);
@@ -104,7 +257,12 @@ ipcMain.handle('start-server', async (event, server) => {
 
 ipcMain.handle('stop-server', async (event, server) => {
   try {
-    return stopServer(server);
+    const result = stopServer(server);
+    // Update tray menu after stopping server
+    if (tray) {
+      setTimeout(() => updateTrayMenu(), 1000);
+    }
+    return result;
   } catch (error) {
     console.error('Error stopping server:', error);
     return false;
@@ -187,6 +345,8 @@ ipcMain.on('open-settings', (event) => {
 
 // Clean up all running servers before quitting
 app.on('before-quit', async (event) => {
+  if (!isQuitting) return;
+  
   const running = getRunningProcesses();
   if (running.length > 0) {
     console.log(`NPMate is shutting down. Stopping ${running.length} running server(s)...`);
@@ -232,8 +392,8 @@ app.on('before-quit', async (event) => {
 });
 
 app.on('window-all-closed', () => {
-  // On macOS, keep the app running even when all windows are closed
-  if (process.platform !== 'darwin') {
+  // Don't quit when all windows are closed if we have tray
+  if (process.platform !== 'darwin' && !tray) {
     app.quit();
   }
 });
@@ -242,7 +402,23 @@ app.on('activate', () => {
   // On macOS, re-create a window when the dock icon is clicked
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
+  } else if (mainWindow) {
+    showMainWindow();
   }
 });
+
+// Handle second instance (prevent multiple instances)
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    // Someone tried to run a second instance, focus our window instead
+    if (mainWindow) {
+      showMainWindow();
+    }
+  });
+}
 
 app.whenReady().then(createWindow);
