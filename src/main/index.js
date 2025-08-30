@@ -177,6 +177,42 @@ function showTrayNotification() {
   }
 }
 
+// Auto-start servers function
+async function startAutoStartServers() {
+  try {
+    console.log('Checking for auto-start servers...');
+    const servers = readRegistry();
+    const autoStartServers = servers.filter(server => server.autoStart === true);
+    
+    if (autoStartServers.length === 0) {
+      console.log('No auto-start servers found.');
+      return;
+    }
+    
+    console.log(`Found ${autoStartServers.length} auto-start server(s):`, autoStartServers.map(s => s.name));
+    
+    // Start each auto-start server with a small delay between them
+    for (let i = 0; i < autoStartServers.length; i++) {
+      const server = autoStartServers[i];
+      try {
+        console.log(`Starting auto-start server: ${server.name}`);
+        startServer(server);
+        
+        // Add delay between starts to avoid overwhelming the system
+        if (i < autoStartServers.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      } catch (error) {
+        console.error(`Failed to start auto-start server "${server.name}":`, error);
+      }
+    }
+    
+    console.log('Auto-start sequence completed.');
+  } catch (error) {
+    console.error('Error in startAutoStartServers:', error);
+  }
+}
+
 // IPC Handlers for settings
 ipcMain.handle('get-settings', async () => {
   try {
@@ -421,4 +457,20 @@ if (!gotTheLock) {
   });
 }
 
-app.whenReady().then(createWindow);
+// Modified app.whenReady() to include auto-start functionality
+app.whenReady().then(() => {
+  createWindow();
+  
+  // Check if app was started with --startup flag (from Windows startup)
+  const isStartupLaunch = process.argv.includes('--startup');
+  
+  if (isStartupLaunch) {
+    console.log('NPMate started via Windows startup');
+  }
+  
+  // Check for auto-start servers after app initialization
+  // Add a delay to ensure the app is fully initialized
+  setTimeout(() => {
+    startAutoStartServers();
+  }, 3000);
+});
